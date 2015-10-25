@@ -1,0 +1,131 @@
+---
+title: "Machine Learning Course Project"
+author: "Alyx Gray"
+date: "October 25, 2015"
+output: html_document
+---
+
+# Introduction
+The goal of this project is to predict the type of movement a study participant makes by building a model from sensor data collected during the movements.  The prediction algorithm was built using data provided by http://groupware.les.inf.puc-rio.br/har.  The training data and testing data can be found at https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv and https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv, respectively.
+
+# Getting and Cleaning Data
+## Loading Data
+
+```{r eval=FALSE}
+# Load the caret library to use machine learning functions
+library(caret)
+
+# load training data
+if (file.exists("./pml-training.csv"))
+{
+  trainData <- read.csv("./pml-training.csv", 
+      header = TRUE, 
+      sep=",", 
+      stringsAsFactors = TRUE, 
+      na.strings=c("NA", "", "#DIV/0!"),
+      colClasses = c("cvtd_timestamp" = "Date")
+    )
+}
+
+# Load testing data
+if (file.exists("./pml-testing.csv"))
+{
+  testData <- read.csv("./pml-testing.csv", 
+                        header = TRUE, 
+                        sep=",", 
+                        stringsAsFactors = TRUE, 
+                        na.strings=c("NA", "", "#DIV/0!"),
+                        colClasses = c("cvtd_timestamp" = "Date")
+  )
+}
+```
+
+## Cleaning Data
+```{r eval=FALSE}
+# Remove timestamps and non-numeric data
+keepCols <- names(trainData)[8:160]
+relevant <- trainData[,keepCols]
+rm (keepCols)
+
+# Remove rows that are at least 99% N/A
+relevant <- relevant[, colSums(is.na(relevant)) < nrow(relevant) * 0.99]
+
+# Find out which attributes have some correlation to the predictor
+relevant$classe <- as.numeric(relevant$classe)
+relevant_cor <- cor(relevant, relevant$classe)
+```
+
+```{r eval=FALSE}
+# Useful rows are kept for the model
+rows_keep <- row.names(relevant_cor)[!is.na(relevant_cor)]
+rm (relevant_cor, relevant)
+usefulData <- trainData[,rows_keep]
+rm (rows_keep, trainData)
+```
+
+# Building Model
+```{r eval=FALSE}
+# Split the data
+isValidation <- sample.split(rownames(usefulData), SplitRatio = 1/8)
+validationSample <- usefulData[isValidation,]
+learningSample <- usefulData[!isValidation,]
+
+# Used boosting prediction algorithm.  Opted for accuracy over time.
+model <- train (classe ~., data=learningSample, preProcess=c("center", "scale"), method="gbm")
+```
+
+# Testing Model
+```{r eval=FALSE}
+# Keep only what's needed
+usefulTest <- testData[,colnames(usefulData)[1:52]]
+testPredictions <- predict(model, usefulTest)
+```
+
+# Validation: Model Fit Analysis
+```{r eval=FALSE}
+# Cross Validation
+predictFromValidation <- predict(model, validationSample)
+confusionMatrix(predictFromValidation, validationSample$classe)
+accuracy <- as.numeric(1-fit$overall['Accuracy'])*100
+```
+
+```{r, results='asis', eval=FALSE}
+# Hard-coded in .Rmd due to long processing time.
+Confusion Matrix and Statistics
+
+          Reference
+Prediction   A   B   C   D   E
+         A 669  12   0   0   0
+         B   2 459  13   0   6
+         C   1   4 431   9   2
+         D   1   1   5 398   6
+         E   1   0   1   2 429
+
+Overall Statistics
+                                          
+               Accuracy : 0.9731          
+                 95% CI : (0.9659, 0.9791)
+    No Information Rate : 0.2749          
+    P-Value [Acc > NIR] : < 2.2e-16       
+                                          
+                  Kappa : 0.966           
+ Mcnemar's Test P-Value : 0.004664        
+
+Statistics by Class:
+
+                     Class: A Class: B Class: C Class: D Class: E
+Sensitivity            0.9926   0.9643   0.9578   0.9731   0.9684
+Specificity            0.9933   0.9894   0.9920   0.9936   0.9980
+Pos Pred Value         0.9824   0.9562   0.9642   0.9684   0.9908
+Neg Pred Value         0.9972   0.9914   0.9905   0.9946   0.9931
+Prevalence             0.2749   0.1941   0.1835   0.1668   0.1807
+Detection Rate         0.2728   0.1872   0.1758   0.1623   0.1750
+Detection Prevalence   0.2777   0.1958   0.1823   0.1676   0.1766
+Balanced Accuracy      0.9929   0.9768   0.9749   0.9834   0.9832
+```
+
+###Estimated Out-Of-Sample Error (in percent)
+```{r echo=FALSE}
+  # Results from earlier command.  Hard-coded in .Rmd due to long processing time.
+  2.69168
+```
